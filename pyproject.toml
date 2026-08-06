@@ -1,0 +1,26 @@
+[project]
+name = "production-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Mohammad Sadegh Eftekhar", email = "m.sadegh@tutamail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.141.1",
+    "langchain-anthropic>=1.5.4",
+    "langgraph>=1.2.10",
+    "langsmith>=0.10.16",
+    "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.2.2",
+    "slowapi>=0.1.10",
+    "uvicorn>=0.52.1",
+]
+
+[project.scripts]
+production-api = "production_api:main"
+
+[build-system]
+requires = ["uv_build>=0.12.2,<0.13.0"]
+build-backend = "uv_build"
