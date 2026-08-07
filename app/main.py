@@ -79,3 +79,12 @@ async def lifespan(app: FastAPI):
     
     # === Rate Limiter Setup ===
 limiter = Limiter(key_func=get_remote_address)
+
+# === FastAPI App ===
+app = FastAPI(
+    title="Production LangGraph API",
+    description="A production-ready chat API with security, caching, and observability.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+app.state.limiter = limiter
