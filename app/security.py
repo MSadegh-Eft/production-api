@@ -129,3 +129,50 @@ class OutputValidator:
                 break
 
         return output, warnings
+
+
+# === Combined Security Pipeline ===
+
+
+class SecurityPipeline:
+    """
+    Full security pipeline that processes input and output.
+    This is the single class you wire into your API.
+    """
+
+    def __init__(self):
+        self.sanitizer = InputSanitizer()
+        self.pii_detector = PIIDetector()
+        self.output_validator = OutputValidator()
+
+    @traceable(name="security_check_input")
+    def check_input(self, text: str) -> tuple[bool, str, list[str]]:
+        """
+        Process input through security checks.
+        Returns: (is_allowed, cleaned_text, security_notes)
+        """
+        notes = []
+
+        # Step 1: Check for injection
+        is_safe, reason = self.sanitizer.check(text)
+        if not is_safe:
+            return False, "", [reason]
+
+        # Step 2: Clean input
+        cleaned = self.sanitizer.clean(text)
+
+        # Step 3: Mask PII before it reaches the LLM
+        pii_found = self.pii_detector.detect(cleaned)
+        if pii_found:
+            cleaned = self.pii_detector.mask(cleaned)
+            notes.append(f"Input PII masked: {list(pii_found.keys())}")
+
+        return True, cleaned, notes
+
+    @traceable(name="security_check_output")
+    def check_output(self, text: str) -> tuple[str, list[str]]:
+        """
+        Validate output before returning to client.
+        Returns: (cleaned_output, warnings)
+        """
+        return self.output_validator.validate(text)
