@@ -214,3 +214,38 @@ async def chat(request: Request, body: ChatRequest):
         processing_time_ms=round(timer.elapsed_ms, 2),
         security_notes=security_notes,
     )
+
+
+
+
+@app.get("/health", response_model=HealthResponse)
+async def health():
+    """Health check for Docker/Kubernetes."""
+    settings = get_settings()
+
+    checks = {
+        "agent": agent is not None,
+        "security": security is not None,
+        "cache": cache is not None,
+    }
+
+    all_healthy = all(checks.values())
+
+    return HealthResponse(
+        status="healthy" if all_healthy else "degraded",
+        environment=settings.app_env,
+        checks=checks,
+    )
+
+
+@app.get("/metrics", response_model=MetricsResponse)
+async def get_metrics():
+    """Metrics for monitoring dashboards."""
+    summary = metrics.summary
+    return MetricsResponse(**summary)
+
+
+@app.get("/cache/stats")
+async def cache_stats():
+    """Cache performance statistics."""
+    return cache.stats
