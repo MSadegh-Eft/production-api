@@ -96,7 +96,7 @@ class ProductionAgent:
             return {
                 "messages": [
                     AIMessage(content=(
-                        "I'm sorry, I'm having trouble processing your request "
+                        "We're sorry, the agent is having trouble processing your request "
                         "right now. Please try again in a moment."
                     ))
                 ],
