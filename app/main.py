@@ -88,3 +88,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.state.limiter = limiter
+
+
+# === Exception Handlers ===
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Handle rate limit exceeded errors."""
+    logger.warning("Rate limit exceeded", extra={"extra_data": {
+        "client_ip": get_remote_address(request),
+    }})
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "Rate limit exceeded",
+            "detail": "Too many requests. Please slow down.",
+        },
+    )
+
