@@ -111,3 +111,16 @@ class MetricsCollector:
             "total_input_tokens": self._tokens_input,
             "total_output_tokens": self._tokens_output,
         }
+
+
+# === Request Timer (utility) ===
+
+class RequestTimer:
+    """Context manager for timing requests."""
+
+    def __enter__(self):
+        self.start = time.time()
+        return self
+
+    def __exit__(self, *args):
+        self.elapsed_ms = (time.time() - self.start) * 1000
