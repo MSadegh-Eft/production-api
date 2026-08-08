@@ -141,7 +141,29 @@ class ProductionAgent:
 
         return graph.compile()
 
-    @traceable(name="production_agent_invoke")
+    # @traceable(name="production_agent_invoke")
+    # def invoke(self, message: str) -> dict:
+    #     """
+    #     Invoke the agent with a user message.
+    #     Returns: {"response": str, "model_used": str, "error": str | None}
+    #     """
+    #     result = self.graph.invoke({
+    #         "messages": [HumanMessage(content=message)],
+    #         "error": None,
+    #         "retry_count": 0,
+    #         "model_used": "",
+    #     })
+
+    #     return {
+    #         "response": result["messages"][-1].content,
+    #         "model_used": result.get("model_used", "unknown"),
+    #         "error": result.get("error"),
+    #     }
+
+    
+    # new implementation of invoke with output format handling (because of the output format of the gemini-3.5-flash model)
+
+    @traceable(name="production_agent_invoke") 
     def invoke(self, message: str) -> dict:
         """
         Invoke the agent with a user message.
@@ -154,8 +176,19 @@ class ProductionAgent:
             "model_used": "",
         })
 
+        content = result["messages"][-1].content
+
+        if isinstance(content, list):
+            response = "".join(
+                block["text"]
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        else:
+            response = content
+
         return {
-            "response": result["messages"][-1].content,
+            "response": response,
             "model_used": result.get("model_used", "unknown"),
             "error": result.get("error"),
         }
