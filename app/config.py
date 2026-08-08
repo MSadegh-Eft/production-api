@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # LLM Configuration
     openai_api_key: str
     google_api_key: str
-    primary_model: str = "gemini-2.5-flash"
+    primary_model: str = "gemini-3.5-flash"
     fallback_model: str = "gpt-4o-mini"
     
     # LangSmith
