@@ -32,6 +32,9 @@ RUN uv sync --frozen --no-dev
 # Copy application code
 COPY --chown=appuser:appuser app/ app/
 
+# Copy the chat frontend (served by StaticFiles at "/")
+COPY --chown=appuser:appuser static/ static/
+
 # Expose port
 EXPOSE 8000
 

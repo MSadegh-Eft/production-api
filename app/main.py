@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -249,3 +250,11 @@ async def get_metrics():
 async def cache_stats():
     """Cache performance statistics."""
     return cache.stats
+
+
+# =============================================
+# STATIC FRONTEND
+# Mounted last so it never shadows the API routes above.
+# Visiting "/" now serves the chat UI instead of a bare API root.
+# =============================================
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
