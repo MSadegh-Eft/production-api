@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>production-api</title>
+<title>Agent Console</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%2312151A%22/><circle cx=%2216%22 cy=%2216%22 r=%226%22 fill=%22%234FD1C5%22/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -79,6 +79,8 @@
   }
   .status.online .dot{ background:var(--teal); box-shadow:0 0 6px rgba(79,209,197,0.7);}
   .status.offline .dot{ background:var(--red); box-shadow:0 0 6px rgba(229,120,124,0.7);}
+  .status.waking .dot{ background:var(--amber); animation:pulse 1.2s infinite ease-in-out; }
+  @keyframes pulse{ 0%,100%{opacity:.4;} 50%{opacity:1;} }
   .docsLink{
     font-family:'IBM Plex Mono',monospace;
     font-size:11.5px;
@@ -270,7 +272,7 @@
 <header>
   <div class="brand">
     <div class="mark"></div>
-    <div class="name">production-api<span> · agent console</span></div>
+    <div class="name">Agent Console<span> · production-api</span></div>
   </div>
   <div class="headerRight">
     <div class="status" id="statusIndicator">
@@ -331,9 +333,21 @@ newThreadBtn.addEventListener('click', () => {
   emptyState.style.display = 'block';
 });
 
+let isWaking = false;
+
 async function pingHealth(){
+  // On the free tier, an idle instance doesn't respond until it's finished
+  // spinning up — the request just hangs. If a check takes a while, assume
+  // that's what's happening rather than reporting a false outage.
+  const wakingTimer = setTimeout(() => {
+    isWaking = true;
+    statusIndicator.className = 'status waking';
+    statusText.textContent = 'waking up…';
+  }, 4000);
+
   try{
     const res = await fetch('/health');
+    clearTimeout(wakingTimer);
     if(res.ok){
       statusIndicator.className = 'status online';
       statusText.textContent = 'online';
@@ -342,8 +356,11 @@ async function pingHealth(){
       statusText.textContent = 'degraded';
     }
   } catch(e){
+    clearTimeout(wakingTimer);
     statusIndicator.className = 'status offline';
     statusText.textContent = 'offline';
+  } finally {
+    isWaking = false;
   }
 }
 pingHealth();
@@ -380,7 +397,23 @@ function addTypingRow(){
   row.innerHTML = '<div class="bubble typing"><span></span><span></span><span></span></div>';
   thread.appendChild(row);
   mainEl.scrollTop = mainEl.scrollHeight;
+
+  // If this drags on, the free-tier instance is most likely waking from
+  // idle rather than the agent actually taking that long to respond.
+  row._wakeTimer = setTimeout(() => {
+    const bubble = row.querySelector('.bubble');
+    bubble.classList.remove('typing');
+    bubble.textContent = 'Waking up the service — first request after idle can take up to a minute.';
+    bubble.style.color = 'var(--text-faint)';
+    bubble.style.fontSize = '13px';
+  }, 6000);
+
   return row;
+}
+
+function removeTypingRow(row){
+  if(row._wakeTimer) clearTimeout(row._wakeTimer);
+  row.remove();
 }
 
 function addTrace(row, data){
@@ -415,7 +448,7 @@ async function send(){
       body: JSON.stringify({ message: text, thread_id: threadId })
     });
 
-    typingRow.remove();
+    removeTypingRow(typingRow);
 
     if(res.status === 429){
       addRow('system', 'Rate limit reached. Wait a moment before sending another message.');
@@ -430,7 +463,7 @@ async function send(){
       addTrace(row, data);
     }
   } catch(e){
-    typingRow.remove();
+    removeTypingRow(typingRow);
     addRow('system', 'Could not reach the service. Check your connection and try again.');
   } finally {
     sendBtn.disabled = false;

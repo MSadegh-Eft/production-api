@@ -83,9 +83,15 @@ limiter = Limiter(key_func=get_remote_address)
 
 # === FastAPI App ===
 app = FastAPI(
-    title="Production LangGraph API",
-    description="A production-ready chat API with security, caching, and observability.",
+    title="Agent Console API",
+    description=(
+        "Chat API backing the Agent Console. Every request passes through "
+        "input sanitization and PII masking, checks a response cache, then "
+        "runs the LangGraph agent with automatic retries and model fallback. "
+        "See /health for service status and /metrics for live performance data."
+    ),
     version="1.0.0",
+    contact={"name": "Mohammad Sadegh Eftekhar"},
     lifespan=lifespan,
 )
 app.state.limiter = limiter
