@@ -152,7 +152,7 @@ async def chat(request: Request, body: ChatRequest):
             )
 
         # ---- Step 2: Cache Lookup ----
-        cached_response = cache.get(cleaned_message)
+        cached_response = cache.get(cleaned_message, thread_id=body.thread_id)
         if cached_response is not None:
             metrics.record_request(latency_ms=0, cache_hit=True)
             logger.info("Cache hit", extra={"extra_data": {
@@ -168,7 +168,7 @@ async def chat(request: Request, body: ChatRequest):
 
         # ---- Step 3: Invoke LangGraph Agent ----
         try:
-            result = agent.invoke(cleaned_message)
+            result = agent.invoke(cleaned_message, thread_id=body.thread_id)
         except Exception as e:
             logger.error(f"Agent invocation failed: {e}", extra={"extra_data": {
                 "thread_id": body.thread_id,
@@ -188,7 +188,7 @@ async def chat(request: Request, body: ChatRequest):
         security_notes.extend(output_warnings)
 
         # ---- Step 5: Cache Store ----
-        cache.set(cleaned_message, validated_response)
+        cache.set(cleaned_message, validated_response, thread_id=body.thread_id)
 
     # ---- Step 6: Log & Record Metrics ----
     input_tokens = int(len(cleaned_message.split()) * 1.3)

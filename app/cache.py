@@ -24,19 +24,23 @@ class ResponseCache:
         self._hits = 0
         self._misses = 0
 
-    def _make_key(self, query: str) -> str:
-        """Create a cache key from the normalized query."""
-        normalized = query.lower().strip()
+    def _make_key(self, query: str, thread_id: str = "default") -> str:
+        """Create a cache key from the thread + normalized query.
+
+        Scoped per thread_id: once the agent has conversation memory,
+        the same text (e.g. "yes") can mean different things in
+        different conversations, so a cache hit must stay within the
+        conversation it came from.
+        """
+        normalized = f"{thread_id}:{query.lower().strip()}"
         return hashlib.sha256(normalized.encode()).hexdigest()
 
-    # 'What is Python?' and 'what is python?'
-
-    def get(self, query: str) -> Optional[str]:
+    def get(self, query: str, thread_id: str = "default") -> Optional[str]:
         """
         Get cached response if it exists and hasn't expired.
         Returns None on cache miss.
         """
-        key = self._make_key(query)
+        key = self._make_key(query, thread_id)
 
         if key in self._cache:
             entry = self._cache[key]
@@ -51,9 +55,9 @@ class ResponseCache:
         self._misses += 1
         return None
 
-    def set(self, query: str, response: str) -> None:
-        """Cache a response."""
-        key = self._make_key(query)
+    def set(self, query: str, response: str, thread_id: str = "default") -> None:
+        """Cache a response, scoped to the conversation it came from."""
+        key = self._make_key(query, thread_id)
         self._cache[key] = {
             "response": response,
             "timestamp": time.time(),

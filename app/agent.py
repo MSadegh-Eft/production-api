@@ -7,6 +7,7 @@ from typing import Optional
 from typing_extensions import TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
@@ -55,6 +56,7 @@ class ProductionAgent:
             api_key=settings.openai_api_key,
         )
         self.max_retries = settings.max_retries
+        self.checkpointer = MemorySaver()
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -139,42 +141,30 @@ class ProductionAgent:
         )
         graph.add_edge("error", END)
 
-        return graph.compile()
+        return graph.compile(checkpointer=self.checkpointer)
 
-    # @traceable(name="production_agent_invoke")
-    # def invoke(self, message: str) -> dict:
-    #     """
-    #     Invoke the agent with a user message.
-    #     Returns: {"response": str, "model_used": str, "error": str | None}
-    #     """
-    #     result = self.graph.invoke({
-    #         "messages": [HumanMessage(content=message)],
-    #         "error": None,
-    #         "retry_count": 0,
-    #         "model_used": "",
-    #     })
-
-    #     return {
-    #         "response": result["messages"][-1].content,
-    #         "model_used": result.get("model_used", "unknown"),
-    #         "error": result.get("error"),
-    #     }
-
-    
-    # new implementation of invoke with output format handling (because of the output format of the gemini-3.5-flash model)
-
-    @traceable(name="production_agent_invoke") 
-    def invoke(self, message: str) -> dict:
+    @traceable(name="production_agent_invoke")
+    def invoke(self, message: str, thread_id: str = "default") -> dict:
         """
         Invoke the agent with a user message.
+
+        thread_id selects which conversation's history to load and append
+        to via the checkpointer — pass the same thread_id across calls to
+        keep a multi-turn conversation, or a new one to start fresh.
+
         Returns: {"response": str, "model_used": str, "error": str | None}
         """
-        result = self.graph.invoke({
-            "messages": [HumanMessage(content=message)],
-            "error": None,
-            "retry_count": 0,
-            "model_used": "",
-        })
+        config = {"configurable": {"thread_id": thread_id}}
+
+        result = self.graph.invoke(
+            {
+                "messages": [HumanMessage(content=message)],
+                "error": None,
+                "retry_count": 0,
+                "model_used": "",
+            },
+            config=config,
+        )
 
         content = result["messages"][-1].content
 
