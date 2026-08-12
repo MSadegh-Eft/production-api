@@ -1,0 +1,37 @@
+# render.yaml — Infrastructure as Code for Render
+services:
+  - type: web
+    name: production-api
+    runtime: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: RATE_LIMIT
+        value: "20/minute"
+      - key: CACHE_TTL_SECONDS
+        value: "300"
+      - key: MAX_RETRIES
+        value: "3"
+      - key: PRIMARY_MODEL
+        value: gemini-3.5-flash
+      - key: FALLBACK_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_API_KEY
+        sync: false  # Must be set manually — NEVER commit secrets
+      - key: GOOGLE_API_KEY
+        sync: false  # Must be set manually — required by Settings
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Must be set manually — used if you enable the Anthropic model
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_API_KEY
+        sync: false  # Must be set manually
+      - key: LANGCHAIN_PROJECT
+        value: production-api
+    healthCheckPath: /health
+    autoDeploy: true
