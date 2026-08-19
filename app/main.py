@@ -11,9 +11,10 @@ Wires together:
 - Health checks
 """
 
+import asyncio
 import time
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, ExitStack
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -22,6 +23,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from langsmith import traceable
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres import PostgresSaver
 from dotenv import load_dotenv
 
 from app.config import get_settings
@@ -68,14 +71,29 @@ async def lifespan(app: FastAPI):
     security = SecurityPipeline()
     cache = ResponseCache(ttl_seconds=settings.cache_ttl_seconds)
     metrics = MetricsCollector()
-    agent = ProductionAgent()
 
-    logger.info("All components initialized. Ready to serve requests.")
+    # ExitStack lets us conditionally open a Postgres connection (kept
+    # alive for the app's lifetime) while still falling back cleanly to
+    # plain in-memory checkpointing when DATABASE_URL isn't set.
+    with ExitStack() as stack:
+        if settings.database_url:
+            checkpointer = stack.enter_context(
+                PostgresSaver.from_conn_string(settings.database_url)
+            )
+            checkpointer.setup()  # idempotent — creates tables on first run
+            logger.info("Persistent (Postgres) conversation memory enabled.")
+        else:
+            checkpointer = MemorySaver()
+            logger.info("In-memory only — conversation history won't survive a restart.")
 
-    yield  # App is running
+        agent = ProductionAgent(checkpointer=checkpointer)
 
-    # Shutdown
-    logger.info("Shutting down...", extra={"extra_data": metrics.summary})
+        logger.info("All components initialized. Ready to serve requests.")
+
+        yield  # App is running
+
+        # Shutdown
+        logger.info("Shutting down...", extra={"extra_data": metrics.summary})
     
     
     # === Rate Limiter Setup ===
@@ -168,7 +186,11 @@ async def chat(request: Request, body: ChatRequest):
 
         # ---- Step 3: Invoke LangGraph Agent ----
         try:
-            result = agent.invoke(cleaned_message, thread_id=body.thread_id)
+            # Runs the (synchronous) LLM + checkpoint I/O in a worker
+            # thread so it doesn't block the event loop for other requests.
+            result = await asyncio.to_thread(
+                agent.invoke, cleaned_message, thread_id=body.thread_id
+            )
         except Exception as e:
             logger.error(f"Agent invocation failed: {e}", extra={"extra_data": {
                 "thread_id": body.thread_id,

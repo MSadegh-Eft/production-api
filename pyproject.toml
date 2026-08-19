@@ -13,6 +13,8 @@ dependencies = [
     "langchain-google-genai>=4.3.2",
     "langchain-openai>=1.4.2",
     "langgraph>=1.2.10",
+    "langgraph-checkpoint-postgres",
+    "psycopg[binary,pool]",
     "langsmith>=0.10.16",
     "pydantic-settings>=2.14.2",
     "python-dotenv>=1.2.2",

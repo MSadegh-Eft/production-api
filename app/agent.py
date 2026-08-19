@@ -28,6 +28,49 @@ class AgentState(TypedDict):
     retry_count: int
     model_used: str
 
+
+# === Context-window trimming ===
+
+def _approx_token_count(messages: list[BaseMessage]) -> int:
+    """
+    Rough cross-provider token estimate. Gemini and OpenAI use different
+    tokenizers, so an exact count would mean calling each provider's API —
+    not worth it just to decide what to trim. ~4 chars/token is the
+    standard English-text rule of thumb, plus a small per-message overhead
+    for role/formatting tokens.
+    """
+    total = 0
+    for msg in messages:
+        content = msg.content
+        if isinstance(content, list):
+            text = "".join(
+                block.get("text", "") for block in content if isinstance(block, dict)
+            )
+        else:
+            text = content or ""
+        total += len(text) // 4 + 4
+    return total
+
+
+def _trim_to_budget(messages: list[BaseMessage], max_tokens: int) -> list[BaseMessage]:
+    """
+    Drop the oldest turns until the history fits max_tokens. Always keeps
+    at least the newest message, and always starts the trimmed history on
+    a HumanMessage (drops in human/ai pairs) since every provider expects
+    that shape.
+    """
+    if _approx_token_count(messages) <= max_tokens:
+        return messages
+
+    kept = list(messages)
+    while len(kept) > 1 and _approx_token_count(kept) > max_tokens:
+        kept.pop(0)
+        if kept and isinstance(kept[0], AIMessage):
+            kept.pop(0)
+
+    return kept
+
+
 # === Agent Builder ===
 
 class ProductionAgent:
@@ -38,7 +81,7 @@ class ProductionAgent:
     - LangSmith tracing
     """
 
-    def __init__(self):
+    def __init__(self, checkpointer=None):
         settings = get_settings()
 
         self.primary_llm = ChatGoogleGenerativeAI(
@@ -56,7 +99,11 @@ class ProductionAgent:
             api_key=settings.openai_api_key,
         )
         self.max_retries = settings.max_retries
-        self.checkpointer = MemorySaver()
+        self.max_context_tokens = settings.max_context_tokens
+
+        # Pass a checkpointer in (e.g. a PostgresSaver) for memory that
+        # survives restarts. Defaults to in-process-only memory otherwise.
+        self.checkpointer = checkpointer or MemorySaver()
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -65,7 +112,8 @@ class ProductionAgent:
         def process_message(state: AgentState) -> dict:
             """Try to process the message with the primary model."""
             try:
-                response = self.primary_llm.invoke(state["messages"])
+                trimmed = _trim_to_budget(state["messages"], self.max_context_tokens)
+                response = self.primary_llm.invoke(trimmed)
                 return {
                     "messages": [response],
                     "error": None,
@@ -81,7 +129,8 @@ class ProductionAgent:
         def try_fallback(state: AgentState) -> dict:
             """Fallback to secondary model."""
             try:
-                response = self.fallback_llm.invoke(state["messages"])
+                trimmed = _trim_to_budget(state["messages"], self.max_context_tokens)
+                response = self.fallback_llm.invoke(trimmed)
                 return {
                     "messages": [response],
                     "error": None,

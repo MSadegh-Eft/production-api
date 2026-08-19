@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     rate_limit: str = "20/minute"
     cache_ttl_seconds: int = 300
     max_retries: int = 3
+
+    # Conversation memory
+    # Ceiling on how many tokens of chat history get sent to the LLM per
+    # request, kept safely under gpt-4o-mini's 128K context window since
+    # the fallback model may end up serving the same trimmed history.
+    max_context_tokens: int = 100_000
+    # Leave blank to keep memory in-process only (wiped whenever the
+    # server restarts, e.g. Render free-tier spin-down). Set to a Postgres
+    # connection string (e.g. from Neon) to persist it across restarts.
+    database_url: str = ""
     
     
     model_config = {"env_file": ".env", "extra": "ignore"}
